@@ -1,58 +1,48 @@
+# main.py
 import cv2
-import numpy as np
+import datetime
+from ultralytics import YOLO
+from config import ALERT_OBJECTS
 
+# Load model YOLO
+model = YOLO("models/yolov8n.pt")
+
+# Buka video CCTV (ganti "0" dengan URL CCTV jika ada)
 cap = cv2.VideoCapture(0)
 
-if not cap.isOpened():
-    print("Error: Kamera tidak bisa dibuka")
-    exit()
+# Fungsi untuk menyimpan log deteksi
+def save_log(label, x1, y1):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("logs/security_log.txt", "a") as log_file:
+        log_file.write(f"{timestamp}: {label} detected at ({x1}, {y1})\n")
 
-ret, prev_frame = cap.read()
-prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-
-colors = {
-    "Merah": ([0, 120, 70], [10, 255, 255]),
-    "Kuning": ([20, 100, 100], [30, 255, 255]),
-    "Hijau": ([36, 100, 100], [86, 255, 255]),
-    "Biru": ([94, 80, 2], [126, 255, 255]),
-    "Ungu": ([129, 50, 70], [158, 255, 255]),
-    "Oranye": ([10, 100, 20], [25, 255, 255]),
-    "Putih": ([0, 0, 200], [180, 50, 255]),
-    "Hitam": ([0, 0, 0], [180, 255, 50])
-}
-
-while True:
+while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
-        print("Error: Tidak dapat menangkap gambar")
         break
 
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    detected_colors = []
+    # Deteksi objek dalam frame
+    results = model(frame)
 
-    for color_name, (lower, upper) in colors.items():
-        lower = np.array(lower, dtype=np.uint8)
-        upper = np.array(upper, dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower, upper)
+    # Proses hasil deteksi
+    for r in results:
+        for box in r.boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            label = r.names[int(box.cls[0])]
+            confidence = box.conf[0].item()
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        for contour in contours:
-            if cv2.contourArea(contour) > 500:
-                x, y, w, h = cv2.boundingRect(contour)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 255, 255), 2)
-                cv2.putText(frame, color_name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                detected_colors.append(color_name)
+            # Gambar bounding box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f"{label}: {confidence:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    diff = cv2.absdiff(prev_gray, gray)
-    _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+            # Simpan log jika objek mencurigakan terdeteksi
+            if label in ALERT_OBJECTS:
+                print(f"⚠️ WARNING: {label} detected!")
+                save_log(label, x1, y1)
 
-    if cv2.countNonZero(thresh) > 3000:
-        cv2.putText(frame, "Gerakan Terdeteksi!", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-    prev_gray = gray.copy()
-
-    cv2.imshow("Deteksi Warna & Gerak", frame)
+    # Tampilkan video
+    cv2.imshow("CCTV Security Monitoring", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
