@@ -16,7 +16,7 @@ def save_log(label, x1, y1):
         log_file.write(f"{timestamp}: {label} detected at ({x1}, {y1})\n")
 
 last_alert = {}
-ALERT_COOLDOWN = 5  # detik
+ALERT_COOLDOWN = 5 
 
 while cap.isOpened():
     ret, frame = cap.read()
