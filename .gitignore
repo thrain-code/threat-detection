@@ -1,4 +1,4 @@
-penv/
+tenv/
 models/
 logs/
 __pycache__/
